@@ -1,0 +1,2 @@
+# Chat-PDF
+This project is a local RAG (Retrieval-Augmented Generation) system built using Ollama, FAISS, and Python, without relying on LangChain. It loads text documents, generates embeddings using the mxbai-embed-large model, stores them in a FAISS vector database, and retrieves the most relevant information based on user queries. The retrieved context is then passed to Llama-2 running locally through Ollama to generate accurate, context-aware responses. This fully offline pipeline ensures fast, private, and efficient document-based question answering.
