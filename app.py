@@ -17,7 +17,7 @@ TOP_K = 4
 # ----------------------------
 
 st.set_page_config(page_title="RAG with Ollama (no LangChain)", page_icon="📚")
-st.title("RAG — Chat with your PDFs using Ollama + FAISS (no LangChain)")
+st.title("Chat-PDf (RAG)")
 
 # ---------- Helpers ----------
 def extract_text_from_pdfs(pdf_files) -> str:
