@@ -68,9 +68,6 @@ def embed_text(batch: List[str]):
     response.raise_for_status()
     data = response.json()
 
-    # Debug: Print the actual response structure
-    st.write("Debug - Response structure:", data)
-    
     # Ollama's actual format is {"embeddings": [[...], [...], ...]}
     if "embeddings" in data:
         vectors = data["embeddings"]
@@ -177,11 +174,13 @@ with st.sidebar:
                 try:
                     vec = embed_text(batch)
                     all_vecs.append(vec)
+                    st.write("Working...")
                 except Exception as e:
                     st.error(f"Embedding failed: {e}")
                     break
 
             if all_vecs:
+                st.write("Done")
                 embs = np.vstack(all_vecs)
                 embs = normalize(embs)
                 index = build_index(embs)
