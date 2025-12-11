@@ -1,216 +1,222 @@
 # app.py
 import streamlit as st
 from PyPDF2 import PdfReader
-import requests
 import numpy as np
 import faiss
+import requests
 import json
 from typing import List
 
-
-# ------------- CONFIG ----------------
+# ---------------------------
+# CONFIG
+# ---------------------------
 OLLAMA_URL = "http://localhost:11434"
-EMBED_MODEL = "mxbai-embed-large"     # embedding model
-LLM_MODEL = "llama3"                  # generation model
-EMBED_BATCH = 16
+EMBED_MODEL = "mxbai-embed-large"
+LLM_MODEL = "llama3"
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 200
 TOP_K = 4
-# -------------------------------------
+BATCH_SIZE = 16
 
-st.set_page_config(page_title="Chat PDF - RAG with Ollama", page_icon="📄")
-st.title("📄 Chat PDF — RAG with Ollama (No LangChain)")
+st.set_page_config(page_title="Chat PDF (RAG) - Ollama", page_icon="📄")
+st.title("📄 Chat with PDFs (RAG + Ollama + Llama 3)")
 
-# -------------------------------------
-# Extract Text from PDF
-# -------------------------------------
-def extract_text_from_pdfs(pdf_files) -> str:
+
+# ----------------------------------------------------
+# PDF → TEXT
+# ----------------------------------------------------
+def extract_text(pdf_files) -> str:
     text = ""
     for pdf in pdf_files:
         try:
             reader = PdfReader(pdf)
             for page in reader.pages:
-                content = page.extract_text()
-                if content:
-                    text += content + "\n"
-        except:
-            st.warning(f"Failed to read {pdf.name}")
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
+        except Exception as e:
+            st.warning(f"Failed to read {pdf.name}: {e}")
     return text
 
 
-# -------------------------------------
-# Text Chunking
-# -------------------------------------
-def chunk_text(text, chunk_size=800, overlap=200):
+# ----------------------------------------------------
+# CHUNKING
+# ----------------------------------------------------
+def chunk_text(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     chunks = []
     start = 0
-    length = len(text)
-
-    while start < length:
-        end = start + chunk_size
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
+    while start < len(text):
+        end = start + size
+        chunk = text[start:end]
+        chunks.append(chunk.strip())
         start = end - overlap
     return chunks
 
 
-# -------------------------------------
-# Ollama Embedding
-# -------------------------------------
-def embed_texts(texts: List[str], model=EMBED_MODEL):
-    url = f"{OLLAMA_URL}/api/embed"
-    payload = {"model": model, "input": texts}
+# ----------------------------------------------------
+# OLLAMA EMBEDDINGS
+# ----------------------------------------------------
+def embed_text(batch: List[str]):
+    payload = {
+        "model": EMBED_MODEL,
+        "input": batch
+    }
+    response = requests.post(
+        f"{OLLAMA_URL}/api/embed",
+        json=payload
+    )
+    response.raise_for_status()
+    data = response.json()
 
-    r = requests.post(url, json=payload)
-    r.raise_for_status()
-    data = r.json()
-
-    # ensure multi-vector output
-    if "data" in data:
-        return np.array([d["embedding"] for d in data["data"]], dtype=np.float32)
-
-    if "embedding" in data:  # single case
-        return np.array([data["embedding"]], dtype=np.float32)
-
-    raise RuntimeError("Unexpected embedding response:", data)
+    # Format: {"data":[{"embedding": [...]}, ...]}
+    vectors = [item["embedding"] for item in data["data"]]
+    return np.array(vectors, dtype="float32")
 
 
-# -------------------------------------
-# Normalize
-# -------------------------------------
+# ----------------------------------------------------
+# NORMALIZE (cosine similarity)
+# ----------------------------------------------------
 def normalize(vectors):
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
+    norms[norms == 0] = 1
     return vectors / norms
 
 
-# -------------------------------------
-# Build FAISS Index
-# -------------------------------------
-def build_index(embs):
-    dim = embs.shape[1]
+# ----------------------------------------------------
+# BUILD FAISS INDEX
+# ----------------------------------------------------
+def build_index(embeddings):
+    dim = embeddings.shape[1]
     index = faiss.IndexFlatIP(dim)
-    index.add(embs)
+    index.add(embeddings)
     return index
 
 
-# -------------------------------------
-# Retrieve Top-K
-# -------------------------------------
-def retrieve(query, chunks, index, top_k=TOP_K):
-    q_emb = embed_texts([query])
+# ----------------------------------------------------
+# RETRIEVAL
+# ----------------------------------------------------
+def retrieve(query, chunks, index):
+    q_emb = embed_text([query])
     q_emb = normalize(q_emb)
 
-    D, I = index.search(q_emb, top_k)
-    results = []
-
-    for idx in I[0]:
-        if 0 <= idx < len(chunks):
-            results.append(chunks[idx])
-
-    return results
+    D, I = index.search(q_emb, TOP_K)
+    retrieved = [chunks[i] for i in I[0] if i < len(chunks)]
+    return retrieved
 
 
-# -------------------------------------
-# Ollama LLM Generate
-# -------------------------------------
-def generate(prompt, model=LLM_MODEL):
-    url = f"{OLLAMA_URL}/api/generate"
-    payload = {"model": model, "prompt": prompt}
+# ----------------------------------------------------
+# GENERATION (Llama 3)
+# ----------------------------------------------------
+def generate_answer(prompt):
+    payload = {
+        "model": LLM_MODEL,
+        "prompt": prompt,
+        "stream": False
+    }
 
-    r = requests.post(url, json=payload)
-    r.raise_for_status()
-    data = r.json()
+    response = requests.post(
+        f"{OLLAMA_URL}/api/generate",
+        json=payload
+    )
+    response.raise_for_status()
+    output = response.json()
+    return output.get("response", "")
 
-    if "response" in data:
-        return data["response"]
 
-    return str(data)
-
-
-# ------------- SESSION STATE ----------------
+# ----------------------------------------------------
+# SESSION STATE
+# ----------------------------------------------------
 if "chunks" not in st.session_state:
-    st.session_state.chunks = None
-if "embeddings" not in st.session_state:
-    st.session_state.embeddings = None
-if "faiss" not in st.session_state:
-    st.session_state.faiss = None
+    st.session_state.chunks = []
+
+if "embs" not in st.session_state:
+    st.session_state.embs = None
+
+if "index" not in st.session_state:
+    st.session_state.index = None
+
 if "ready" not in st.session_state:
     st.session_state.ready = False
 
-# ------------- SIDEBAR ----------------
+
+# ----------------------------------------------------
+# SIDEBAR UI
+# ----------------------------------------------------
 with st.sidebar:
-    st.header("📤 Upload PDFs")
-    pdfs = st.file_uploader("Upload one or more PDFs", type="pdf", accept_multiple_files=True)
+    st.header("📥 Upload PDFs")
+    pdfs = st.file_uploader("Select PDF files", type=["pdf"], accept_multiple_files=True)
 
-    embed_model = st.text_input("Embedding Model", value=EMBED_MODEL)
-    llm_model = st.text_input("LLM Model", value=LLM_MODEL)
-    top_k = st.number_input("Top-K Chunks", min_value=1, max_value=10, value=TOP_K)
-
-    if st.button("⚙️ Process PDFs"):
+    if st.button("Process PDFs"):
         if not pdfs:
-            st.error("Please upload PDF files first.")
+            st.error("Upload PDF files first!")
         else:
             st.info("Extracting text...")
-            text = extract_text_from_pdfs(pdfs)
+            text = extract_text(pdfs)
 
+            st.info("Chunking text...")
             chunks = chunk_text(text)
-            st.success(f"Created {len(chunks)} chunks")
+            st.write(f"Created {len(chunks)} text chunks")
 
-            # embed chunks
-            st.info("Computing embeddings (this may take some time)...")
-            all_embs = []
+            # Embed in batches
+            all_vecs = []
+            st.info("Embedding chunks with Ollama…")
 
-            for i in range(0, len(chunks), EMBED_BATCH):
-                batch = chunks[i:i+EMBED_BATCH]
+            for i in range(0, len(chunks), BATCH_SIZE):
+                batch = chunks[i:i+BATCH_SIZE]
                 try:
-                    batch_emb = embed_texts(batch, model=embed_model)
+                    vec = embed_text(batch)
                 except Exception as e:
                     st.error(f"Embedding failed: {e}")
-                    batch_emb = None
-                all_embs.append(batch_emb)
+                    break
+                all_vecs.append(vec)
 
-            embs = np.vstack(all_embs)
-            embs = normalize(embs)
+            if all_vecs:
+                embs = np.vstack(all_vecs)
+                embs = normalize(embs)
+                index = build_index(embs)
 
-            index = build_index(embs)
+                st.session_state.chunks = chunks
+                st.session_state.embs = embs
+                st.session_state.index = index
+                st.session_state.ready = True
 
-            st.session_state.chunks = chunks
-            st.session_state.embeddings = embs
-            st.session_state.faiss = index
-            st.session_state.ready = True
-
-            st.success("PDFs processed successfully! You can now ask questions.")
+                st.success("PDFs processed successfully! Ask questions now.")
 
 
-# ------------- MAIN CHAT UI ----------------
-st.subheader("💬 Ask a question about your PDFs")
+# ----------------------------------------------------
+# MAIN CHAT SECTION
+# ----------------------------------------------------
+st.header("💬 Ask Your Question")
 
-query = st.text_input("Your question")
+question = st.text_input("Your question:")
 
 if st.button("Ask"):
     if not st.session_state.ready:
-        st.error("Please upload and process PDFs first.")
+        st.error("You must upload & process PDFs first!")
     else:
-        st.info("Retrieving relevant chunks...")
-        results = retrieve(query, st.session_state.chunks, st.session_state.faiss, top_k=int(top_k))
+        st.info("Retrieving relevant chunks…")
+        retrieved = retrieve(question, st.session_state.chunks, st.session_state.index)
 
-        st.markdown("### 🔎 Retrieved Context")
-        for i, r in enumerate(results, 1):
-            st.write(f"**Chunk {i}:** {r[:300]}...")
+        context = "\n\n---\n\n".join(retrieved)
 
         prompt = f"""
-Use ONLY the following context to answer the question.
+Use the following document context to answer the question.
+If the answer is not found, say "I don't know".
 
 Context:
-{chr(10).join(results)}
+{context}
 
-Question: {query}
+Question: {question}
 
-If answer is not found, say "I don't know".
-"""
+Answer:
+        """
 
-        st.info("Generating answer with Llama-3...")
-        answer = generate(prompt, model=llm_model)
+        st.info("Generating answer using Llama 3…")
+        answer = generate_answer(prompt)
 
-        st.markdown("### 🧠 Answer")
+        st.subheader("📌 Answer")
         st.write(answer)
+
+        st.subheader("📄 Retrieved Chunks")
+        for c in retrieved:
+            st.write("- " + c[:500] + "...")
