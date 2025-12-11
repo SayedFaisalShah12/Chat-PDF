@@ -68,9 +68,20 @@ def embed_text(batch: List[str]):
     response.raise_for_status()
     data = response.json()
 
-    # Format: {"data":[{"embedding": [...]}, ...]}
-    vectors = [item["embedding"] for item in data["data"]]
-    return np.array(vectors, dtype="float32")
+    # Debug: Print the actual response structure
+    st.write("Debug - Response structure:", data)
+    
+    # Ollama's actual format is {"embeddings": [[...], [...], ...]}
+    if "embeddings" in data:
+        vectors = data["embeddings"]
+        return np.array(vectors, dtype="float32")
+    # Fallback to original format if needed
+    elif "data" in data:
+        vectors = [item["embedding"] for item in data["data"]]
+        return np.array(vectors, dtype="float32")
+    else:
+        st.error(f"Unexpected response format: {data}")
+        raise ValueError(f"Unexpected response format from Ollama API: {data}")
 
 
 # ----------------------------------------------------
@@ -165,10 +176,10 @@ with st.sidebar:
                 batch = chunks[i:i+BATCH_SIZE]
                 try:
                     vec = embed_text(batch)
+                    all_vecs.append(vec)
                 except Exception as e:
                     st.error(f"Embedding failed: {e}")
                     break
-                all_vecs.append(vec)
 
             if all_vecs:
                 embs = np.vstack(all_vecs)
