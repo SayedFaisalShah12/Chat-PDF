@@ -7,7 +7,7 @@ import faiss
 import json
 from typing import List
 
-hi
+
 # ------------- CONFIG ----------------
 OLLAMA_URL = "http://localhost:11434"
 EMBED_MODEL = "mxbai-embed-large"     # embedding model
