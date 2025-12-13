@@ -1,2 +1,43 @@
-# Chat-PDF
-This project is a local RAG (Retrieval-Augmented Generation) system built using Ollama, FAISS, and Python, without relying on LangChain. It loads text documents, generates embeddings using the mxbai-embed-large model, stores them in a FAISS vector database, and retrieves the most relevant information based on user queries. The retrieved context is then passed to Llama-2 running locally through Ollama to generate accurate, context-aware responses. This fully offline pipeline ensures fast, private, and efficient document-based question answering.
+# 📄 Chat-PDF (RAG) using Ollama + Llama 3
+
+A **Retrieval-Augmented Generation (RAG)** application that allows you to chat with your PDF documents locally using:
+
+- 🦙 **Ollama**
+- 🤖 **Llama 3** (LLM)
+- 🧠 **mxbai-embed-large** (Embeddings)
+- ⚡ **FAISS** (Vector Search)
+- 🎈 **Streamlit** (UI)
+
+🚫 No LangChain  
+🚫 No cloud APIs  
+✅ 100% Local & Free  
+
+---
+
+## 🚀 Features
+
+- Upload multiple PDF files
+- Automatic text extraction & chunking
+- High-quality embeddings using `mxbai-embed-large`
+- Fast similarity search with FAISS
+- Accurate answers using Llama 3
+- Simple, clean Streamlit UI
+
+---
+
+## 🛠 Tech Stack
+
+| Component | Tool |
+|--------|------|
+LLM | Llama 3 (Ollama)
+Embeddings | mxbai-embed-large
+Vector DB | FAISS
+Backend | Python
+UI | Streamlit
+
+---
+
+## 📦 Installation
+
+### 1️⃣ Install Ollama
+Download from:
