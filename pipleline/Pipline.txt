@@ -1,0 +1,143 @@
+1️⃣ Upload PDFs
+
+What happens
+
+The user uploads one or more PDF files from the Streamlit UI.
+
+Why
+
+These PDFs are your knowledge base.
+
+The LLM (Llama 3) cannot read PDFs directly.
+
+
+2️⃣ Extract Text from PDFs
+
+What happens
+
+Each PDF is read page by page using PyPDF2.
+
+Text is extracted and merged into one large string.
+
+Why
+
+LLMs and embedding models only understand text, not PDF files
+
+
+3️⃣ Chunk the Text
+
+What happens
+
+The large text is split into small overlapping chunks
+
+Why
+
+Embedding models have input limits.
+
+Smaller chunks improve retrieval accuracy.
+
+Overlap preserves context between chunks.
+
+
+
+4️⃣ Generate Embeddings (mxbai-embed-large)
+
+What happens
+
+Each text chunk is converted into a vector (numbers) using:
+
+Why
+
+Vectors allow semantic search.
+
+Similar meaning → vectors close together.
+
+Important
+
+❌ Llama 3 cannot generate embeddings
+
+✅ mxbai-embed-large is designed for embeddings
+
+
+
+5️⃣ Build Vector Index (FAISS)
+
+What happens
+
+All embeddings are stored in a FAISS vector index.
+
+Vectors are normalized and indexed for fast similarity search.
+
+Why
+
+FAISS enables instant retrieval even with thousands of chunks.
+
+Uses cosine similarity (via inner product).
+
+
+
+7️⃣ Embed the Question
+
+What happens
+
+The user question is converted into an embedding using the same model.
+
+Why
+
+Question and document chunks must be in the same vector space.
+
+
+8️⃣ Retrieve Relevant Chunks (Top-K)
+
+What happens
+
+FAISS searches for the Top-K most similar chunks.
+
+Why
+
+Only the most relevant document parts are passed to Llama 3.
+
+Reduces hallucination.
+
+
+9️⃣ Build Prompt with Context
+
+What happens
+
+Retrieved chunks are injected into the prompt as context.
+
+Why
+
+This is what makes it Retrieval-Augmented Generation.
+
+
+🔟 Generate Answer (Llama 3)
+
+What happens
+
+Llama 3 generates the final answer using:
+
+User question
+
+Retrieved document context
+
+Why
+
+Llama 3 reasons + explains
+
+Documents provide ground truth
+
+
+1️⃣1️⃣ Display Answer + History
+
+What happens
+
+Answer is shown in the UI.
+
+Question + answer saved in session state.
+
+Why
+
+Enables chat-like experience.
+
+Easy to extend to multi-turn memory later.
