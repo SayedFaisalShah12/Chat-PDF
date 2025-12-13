@@ -41,3 +41,6 @@ UI | Streamlit
 
 ### 1️⃣ Install Ollama
 Download from:
+
+### Link
+https://sayedfaisalshah12-chat-pdf-app-ceklsg.streamlit.app/
